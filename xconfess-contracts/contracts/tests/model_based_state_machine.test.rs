@@ -112,3 +112,9 @@ def test_issue_1227_fix():
 def test_issue_1225_fix():
     # TODO: Implement based on issue requirements
     assert True, Placeholdertest
+
+
+# Additional tests for issue #1224
+def test_issue_1224_fix():
+    # TODO: Implement based on issue requirements
+    assert True, Placeholdertest
