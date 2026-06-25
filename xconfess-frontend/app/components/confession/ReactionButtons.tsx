@@ -26,11 +26,6 @@ export const ReactionButton = ({
     initialUserReaction: isActive ? type : null,
   });
 
-  // Use optimistic values when a mutation is in flight so that both the
-  // count and the selected (active) state update immediately on click and
-  // roll back cleanly if the server rejects the request. Fall back to the
-  // live websocket count when there's no optimistic state in flight, so the
-  // number doesn't revert to a stale prop after a reconnect resyncs it.
   const displayCount = optimisticState?.counts[type] ?? liveCounts[type] ?? count;
   const computedIsActive = optimisticState?.userReaction === type || isActive;
   const statusLabel = `Reaction live status: ${connectionState}`;
@@ -53,13 +48,16 @@ export const ReactionButton = ({
     ? `Reacted with ${type}, current count ${displayCount}`
     : `React with ${type}, current count ${displayCount}`;
 
+  const tooltipId = `reaction-tooltip-${confessionId}-${type}`;
+
   return (
-    <div className="relative">
+    <div className="relative" role="group" aria-label={`${type} reaction control`}>
       <button
         onClick={react}
         disabled={isPending}
         aria-label={label}
         aria-pressed={computedIsActive}
+        aria-describedby={tooltipId}
         title={error || undefined}
         className={cn(
           "relative flex items-center gap-2 px-4 py-2 rounded-full",
@@ -73,11 +71,11 @@ export const ReactionButton = ({
           error && "ring-2 ring-red-500"
         )}
       >
-        <span className="text-lg select-none">
+        <span className="text-lg select-none" aria-hidden="true">
           {type === "like" ? "👍" : "❤️"}
         </span>
 
-        <span className="text-sm font-medium">{displayCount}</span>
+        <span className="text-sm font-medium" aria-live="polite" aria-atomic="true">{displayCount}</span>
         <span
           role="status"
           aria-label={statusLabel}
@@ -90,6 +88,11 @@ export const ReactionButton = ({
           )}
         />
       </button>
+
+      <div id={tooltipId} role="tooltip" className="sr-only">
+        {label}, {displayCount} {type} reaction{displayCount !== 1 ? "s" : ""}
+        {computedIsActive && ", you reacted"}
+      </div>
 
       {error && (
         <div role="alert" className="absolute top-full mt-1 left-1/2 -translate-x-1/2 whitespace-nowrap">
