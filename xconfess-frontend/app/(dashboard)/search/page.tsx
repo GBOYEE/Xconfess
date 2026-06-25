@@ -17,6 +17,7 @@ import type { FilterChipKey } from "@/app/components/search/FilterChips";
 import { Filter, X, HelpCircle, Save } from "lucide-react";
 import { cn } from "@/app/lib/utils/cn";
 import { useFocusTrap } from "@/app/lib/hooks/useFocusTrap";
+import { saveScrollPosition, requestScrollRestore, consumeScrollRestore } from "@/app/lib/api/confessionCache";
 
 const DEBOUNCE_MS = 300;
 
@@ -278,6 +279,45 @@ export default function SearchPage() {
     onEscape: () => setSidebarOpen(false),
     trapFocus: true,
   });
+
+  // Scroll position preservation: save on beforeunload/navigation, restore on mount
+  useEffect(() => {
+    const routeKey = pathname + searchParams.toString();
+
+    // Request scroll restore on mount
+    requestScrollRestore(routeKey);
+
+    // Save scroll position before navigating away
+    const handleBeforeUnload = () => {
+      saveScrollPosition(routeKey);
+    };
+
+    // Also save on route change (for in-app navigation)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        saveScrollPosition(routeKey);
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Attempt scroll restore after data loads
+    if (isInitialized && !isLoading) {
+      const restorePos = consumeScrollRestore(routeKey);
+      if (restorePos !== null && restorePos > 0) {
+        // Defer to ensure DOM is rendered
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: restorePos, behavior: "instant" });
+        });
+      }
+    }
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [pathname, searchParams, isInitialized, isLoading]);
 
   return (
     <div className="min-h-screen bg-zinc-950">
