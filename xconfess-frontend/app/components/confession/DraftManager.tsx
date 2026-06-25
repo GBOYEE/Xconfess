@@ -1,15 +1,16 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useDrafts } from "@/app/lib/hooks/useDrafts";
 import { Draft } from "@/app/lib/types/draft";
 import { Button } from "@/app/components/ui/button";
 import { Modal } from "@/app/components/ui/modal";
 import { ConfirmDialog } from "@/app/components/admin/ConfirmDialog";
 import { useGlobalToast } from "@/app/components/common/Toast";
-import { Trash2, Clock, FileText } from "lucide-react";
+import { Trash2, Clock, FileText, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, X } from "lucide-react";
 import { formatDate } from "@/app/lib/utils/formatDate";
 import { Gender } from "@/app/lib/utils/validation";
+import { cn } from "@/app/lib/utils/cn";
 
 interface DraftManagerProps {
   currentDraft: {
@@ -19,6 +20,14 @@ interface DraftManagerProps {
   };
   onLoadDraft: (draft: Draft) => void;
   autoSaveInterval?: number; // in milliseconds
+}
+
+type ConflictResolution = "keep-local" | "use-server" | "discard";
+
+interface DraftConflict {
+  localDraft: Draft;
+  serverDraft: Draft;
+  onResolve: (resolution: ConflictResolution) => void;
 }
 
 export const DraftManager: React.FC<DraftManagerProps> = ({
@@ -45,6 +54,7 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
     "saved" | "saving" | "unsaved" | "failed"
   >("saved");
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [conflict, setConflict] = useState<DraftConflict | null>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedRef = useRef<string>("");
   const toast = useGlobalToast();
@@ -77,6 +87,38 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drafts]);
+
+  /**
+   * Detect conflict: when the user loads a draft from the list, check if the
+   * current composer content differs from both the selected draft AND the
+   * latest server version. If so, surface a conflict resolution UI.
+   */
+  const detectConflict = useCallback(
+    (selectedDraft: Draft) => {
+      // Find the latest server version of this draft
+      const serverVersion = drafts.find((d) => d.id === selectedDraft.id);
+      if (!serverVersion) return false;
+
+      // Check if server has a newer version than what we selected
+      const serverIsNewer = serverVersion.savedAt > selectedDraft.savedAt;
+      if (!serverIsNewer) return false;
+
+      // Check if local composer content differs from server
+      const localContent = JSON.stringify({
+        title: currentDraft.title,
+        body: currentDraft.body,
+        gender: currentDraft.gender,
+      });
+      const serverContent = JSON.stringify({
+        title: serverVersion.title,
+        body: serverVersion.body,
+        gender: serverVersion.gender,
+      });
+
+      return localContent !== serverContent;
+    },
+    [drafts, currentDraft]
+  );
 
   const persistDraft = async () => {
     const currentContent = JSON.stringify(currentDraft);
@@ -162,6 +204,53 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
   }, [currentDraft, autoSaveInterval, currentDraftId]);
 
   const handleLoadDraft = (draft: Draft) => {
+    // Check for conflict before loading
+    if (detectConflict(draft)) {
+      const serverVersion = drafts.find((d) => d.id === draft.id);
+      if (serverVersion) {
+        setConflict({
+          localDraft: draft,
+          serverDraft: serverVersion,
+          onResolve: (resolution) => {
+            setConflict(null);
+            switch (resolution) {
+              case "keep-local":
+                // Keep current composer content, do nothing
+                setIsModalOpen(false);
+                break;
+              case "use-server":
+                // Load the server version
+                onLoadDraft(serverVersion);
+                setCurrentDraftId(serverVersion.id);
+                lastSavedRef.current = JSON.stringify({
+                  title: serverVersion.title,
+                  body: serverVersion.body,
+                  gender: serverVersion.gender,
+                });
+                setSaveStatus("saved");
+                setSaveMessage("Draft saved.");
+                setIsModalOpen(false);
+                break;
+              case "discard":
+                // Load the originally selected draft
+                onLoadDraft(draft);
+                setCurrentDraftId(draft.id);
+                lastSavedRef.current = JSON.stringify({
+                  title: draft.title,
+                  body: draft.body,
+                  gender: draft.gender,
+                });
+                setSaveStatus("saved");
+                setSaveMessage("Draft saved.");
+                setIsModalOpen(false);
+                break;
+            }
+          },
+        });
+        return;
+      }
+    }
+
     onLoadDraft(draft);
     setCurrentDraftId(draft.id);
     lastSavedRef.current = JSON.stringify({
@@ -192,11 +281,7 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
   /**
    * Called by the composer on successful publish/submit, per acceptance
    * criteria: "Publishing or submitting clears or archives draft per
-   * product rules." Exposed via a side-effect prop would be cleaner, but
-   * to minimize blast radius on this pass we expose it as a stable
-   * function consumers can call directly through a ref if needed.
-   * TODO(product): confirm clear vs archive semantics with product —
-   * this currently clears (deletes) rather than archiving.
+   * product rules."
    */
   const handlePublishCleanup = async () => {
     if (currentDraftId) {
@@ -219,6 +304,93 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
         variant="danger"
         onConfirm={() => void handleClearDrafts()}
       />
+
+      {/* Conflict Resolution Modal */}
+      {conflict && (
+        <Modal
+          isOpen={true}
+          onClose={() => setConflict(null)}
+          title="Draft Conflict Detected"
+        >
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
+              <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-400" />
+              <div>
+                <p className="text-sm font-medium text-amber-300">
+                  This draft has been updated since you last loaded it
+                </p>
+                <p className="mt-1 text-xs text-zinc-400">
+                  Choose which version to keep. Your current composer content differs from the server version.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-3">
+              {/* Keep Local */}
+              <button
+                type="button"
+                onClick={() => conflict.onResolve("keep-local")}
+                className="flex items-start gap-3 rounded-lg border border-zinc-700 bg-zinc-800 p-3 text-left hover:border-blue-500/50 hover:bg-zinc-700 transition-colors"
+              >
+                <ArrowUpFromLine className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-400" />
+                <div>
+                  <p className="text-sm font-medium text-white">Keep my current edits</p>
+                  <p className="mt-0.5 text-xs text-zinc-400">
+                    Preserve what you have in the composer right now
+                  </p>
+                </div>
+              </button>
+
+              {/* Use Server */}
+              <button
+                type="button"
+                onClick={() => conflict.onResolve("use-server")}
+                className="flex items-start gap-3 rounded-lg border border-zinc-700 bg-zinc-800 p-3 text-left hover:border-green-500/50 hover:bg-zinc-700 transition-colors"
+              >
+                <ArrowDownToLine className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-400" />
+                <div>
+                  <p className="text-sm font-medium text-white">Use server version</p>
+                  <p className="mt-0.5 text-xs text-zinc-400">
+                    Load the latest saved version from the server
+                    <span className="text-zinc-500">
+                      {" "}({formatDate(new Date(conflict.serverDraft.savedAt))})
+                    </span>
+                  </p>
+                </div>
+              </button>
+
+              {/* Discard / Load Selected */}
+              <button
+                type="button"
+                onClick={() => conflict.onResolve("discard")}
+                className="flex items-start gap-3 rounded-lg border border-zinc-700 bg-zinc-800 p-3 text-left hover:border-purple-500/50 hover:bg-zinc-700 transition-colors"
+              >
+                <FileText className="mt-0.5 h-4 w-4 flex-shrink-0 text-purple-400" />
+                <div>
+                  <p className="text-sm font-medium text-white">Load selected draft</p>
+                  <p className="mt-0.5 text-xs text-zinc-400">
+                    Load the draft you originally selected
+                    <span className="text-zinc-500">
+                      {" "}({formatDate(new Date(conflict.localDraft.savedAt))})
+                    </span>
+                  </p>
+                </div>
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setConflict(null)}
+              >
+                <X className="mr-1 h-3 w-3" />
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       <div className="flex flex-col gap-2">
         <Button
@@ -279,7 +451,10 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
                 {drafts.map((draft) => (
                   <div
                     key={draft.id}
-                    className="group flex items-start gap-3 rounded-lg border border-zinc-800 bg-zinc-900 p-4 hover:bg-zinc-800 transition-colors cursor-pointer"
+                    className={cn(
+                      "group flex items-start gap-3 rounded-lg border border-zinc-800 bg-zinc-900 p-4 hover:bg-zinc-800 transition-colors cursor-pointer",
+                      currentDraftId === draft.id && "border-blue-500/50 bg-zinc-800"
+                    )}
                     onClick={() => handleLoadDraft(draft)}
                     role="button"
                     tabIndex={0}
@@ -305,6 +480,12 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
                           {formatDate(new Date(draft.savedAt))}
                         </span>
                         <span>{draft.characterCount} characters</span>
+                        {isRemote && (
+                          <span className="flex items-center gap-1 text-blue-400">
+                            <ArrowDownToLine className="h-3 w-3" />
+                            Synced
+                          </span>
+                        )}
                       </div>
                     </div>
                     <Button
