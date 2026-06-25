@@ -5,6 +5,7 @@ import { Eye, Heart, MessageSquare, Anchor, ExternalLink } from "lucide-react";
 import type { SearchConfession } from "@/app/lib/types/search";
 import { cn } from "@/app/lib/utils/cn";
 import { getStellarExplorerUrl } from "@/app/lib/utils/stellar";
+import { saveFeedState } from "@/app/lib/utils/feedStateCache";
 
 interface SearchResultItemProps {
   confession: SearchConfession;
@@ -112,6 +113,14 @@ export function SearchResultItem({
         className
       )}
       data-testid="search-result-item"
+      onClick={() => {
+        saveFeedState({
+          query: searchQuery ?? "",
+          filters: { sort: "newest" },
+          scrollY: window.scrollY,
+          timestamp: Date.now(),
+        });
+      }}
     >
       <HighlightedContent
         content={confession.content}

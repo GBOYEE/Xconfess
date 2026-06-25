@@ -17,6 +17,8 @@ import type { FilterChipKey } from "@/app/components/search/FilterChips";
 import { Filter, X, HelpCircle, Save } from "lucide-react";
 import { cn } from "@/app/lib/utils/cn";
 import { useFocusTrap } from "@/app/lib/hooks/useFocusTrap";
+import { useFeedStatePersistence } from "@/app/lib/hooks/useFeedStatePersistence";
+import { getFeedState } from "@/app/lib/utils/feedStateCache";
 
 const DEBOUNCE_MS = 300;
 
@@ -114,7 +116,22 @@ export default function SearchPage() {
   const sidebarRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
+  // Restore cached feed state on mount (back-navigation from detail)
   useEffect(() => {
+    const cached = getFeedState();
+    if (cached && !searchParams.toString()) {
+      // Only restore from cache when URL has no params (fresh navigation/back)
+      setQuery(cached.query);
+      setFilters(cached.filters);
+      setIsInitialized(true);
+      // Restore scroll after render settles
+      requestAnimationFrame(() => {
+        if (cached.scrollY > 0) {
+          window.scrollTo({ top: cached.scrollY, behavior: "auto" });
+        }
+      });
+      return;
+    }
     const q = searchParams.get("q") || "";
     const parsedFilters = parseFiltersFromParams(searchParams);
     setQuery(q);
@@ -145,6 +162,20 @@ export default function SearchPage() {
     debouncedQuery,
     runSearch,
   });
+
+  // Persist feed state across navigation (search -> detail -> back)
+  const { restoreScroll, clearState } = useFeedStatePersistence({
+    query,
+    filters,
+    isInitialized,
+  });
+
+  // Restore scroll position after results load (back-navigation)
+  useEffect(() => {
+    if (isInitialized && !isLoading && results.length > 0) {
+      restoreScroll();
+    }
+  }, [isInitialized, isLoading, results.length, restoreScroll]);
 
   const hasSearched = runSearch;
   const isEmpty = hasSearched && !isLoading && results.length === 0;
@@ -238,8 +269,9 @@ export default function SearchPage() {
     setFilters({ ...DEFAULT_FILTERS });
     reset();
     setSidebarOpen(false);
+    clearState();
     updateUrl("", DEFAULT_FILTERS);
-  }, [reset, updateUrl]);
+  }, [reset, updateUrl, clearState]);
 
   const handleSuggestion = useCallback(
     (suggestion: string) => {
