@@ -17,6 +17,7 @@ import type { FilterChipKey } from "@/app/components/search/FilterChips";
 import { Filter, X, HelpCircle, Save } from "lucide-react";
 import { cn } from "@/app/lib/utils/cn";
 import { useFocusTrap } from "@/app/lib/hooks/useFocusTrap";
+import { useScrollRestoration } from "@/app/lib/hooks/useScrollRestoration";
 
 const DEBOUNCE_MS = 300;
 
@@ -114,13 +115,20 @@ export default function SearchPage() {
   const sidebarRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
+  // Restore scroll position on back navigation
+  const { restoreScroll } = useScrollRestoration(pathname + searchParams.toString());
+
   useEffect(() => {
     const q = searchParams.get("q") || "";
     const parsedFilters = parseFiltersFromParams(searchParams);
     setQuery(q);
     setFilters(parsedFilters);
     setIsInitialized(true);
-  }, [searchParams]);
+    // Attempt to restore scroll after state is initialized
+    if (isInitialized) {
+      restoreScroll();
+    }
+  }, [searchParams, restoreScroll]);
 
   const debouncedQuery = useDebounce(query, DEBOUNCE_MS);
   const runSearch =
