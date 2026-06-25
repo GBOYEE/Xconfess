@@ -17,6 +17,7 @@ import type { FilterChipKey } from "@/app/components/search/FilterChips";
 import { Filter, X, HelpCircle, Save } from "lucide-react";
 import { cn } from "@/app/lib/utils/cn";
 import { useFocusTrap } from "@/app/lib/hooks/useFocusTrap";
+import { useScrollRestoration } from "@/app/lib/hooks/useScrollRestoration";
 
 const DEBOUNCE_MS = 300;
 
@@ -103,6 +104,8 @@ export default function SearchPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { user } = useAuth(); // Hook validation for user persistence profile state
+  const { restoreScrollPosition, debouncedSaveScrollPosition, clearScrollPosition } =
+    useScrollRestoration();
 
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<SearchFilters>({ ...DEFAULT_FILTERS });
@@ -113,6 +116,37 @@ export default function SearchPage() {
   const filterButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Restore scroll position on mount (back navigation)
+  useEffect(() => {
+    if (!isInitialized) return;
+    // Small delay to allow React Query to hydrate cached data
+    const timer = setTimeout(() => {
+      restoreScrollPosition(60000); // 60s window for cached data
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [isInitialized, restoreScrollPosition]);
+
+  // Track scroll position for restoration on back navigation
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    const handleScroll = () => {
+      debouncedSaveScrollPosition();
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [isInitialized, debouncedSaveScrollPosition]);
+
+  // Save scroll position before navigating to confession detail
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      debouncedSaveScrollPosition();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [debouncedSaveScrollPosition]);
 
   useEffect(() => {
     const q = searchParams.get("q") || "";
@@ -238,8 +272,9 @@ export default function SearchPage() {
     setFilters({ ...DEFAULT_FILTERS });
     reset();
     setSidebarOpen(false);
+    clearScrollPosition();
     updateUrl("", DEFAULT_FILTERS);
-  }, [reset, updateUrl]);
+  }, [reset, updateUrl, clearScrollPosition]);
 
   const handleSuggestion = useCallback(
     (suggestion: string) => {
