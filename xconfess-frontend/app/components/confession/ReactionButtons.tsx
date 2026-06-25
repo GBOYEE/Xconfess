@@ -54,12 +54,13 @@ export const ReactionButton = ({
     : `React with ${type}, current count ${displayCount}`;
 
   return (
-    <div className="relative">
+    <div className="relative" role="group" aria-label={`Reaction controls for ${type}`}>
       <button
         onClick={react}
         disabled={isPending}
         aria-label={label}
         aria-pressed={computedIsActive}
+        aria-live="polite"
         title={error || undefined}
         className={cn(
           "relative flex items-center gap-2 px-4 py-2 rounded-full",
@@ -67,21 +68,21 @@ export const ReactionButton = ({
           "transition-all duration-200 ease-out",
           "bg-zinc-800 hover:bg-zinc-700",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-500",
+          "focus:outline-none",
           "active:scale-95",
           computedIsActive && "bg-pink-600 text-white",
           isAnimating && "animate-reaction-bounce",
           error && "ring-2 ring-red-500"
         )}
       >
-        <span className="text-lg select-none">
+        <span className="text-lg select-none" aria-hidden="true">
           {type === "like" ? "👍" : "❤️"}
         </span>
 
-        <span className="text-sm font-medium">{displayCount}</span>
+        <span className="text-sm font-medium" aria-hidden="true">{displayCount}</span>
         <span
           role="status"
           aria-label={statusLabel}
-          title={statusLabel}
           className={cn(
             "h-2 w-2 rounded-full",
             connectionState === "connected" && "bg-emerald-400",
@@ -90,6 +91,11 @@ export const ReactionButton = ({
           )}
         />
       </button>
+
+      {/* Accessible live region for screen readers to announce count/state changes */}
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {label}
+      </span>
 
       {error && (
         <div role="alert" className="absolute top-full mt-1 left-1/2 -translate-x-1/2 whitespace-nowrap">
