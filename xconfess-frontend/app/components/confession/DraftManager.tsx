@@ -21,6 +21,11 @@ interface DraftManagerProps {
   autoSaveInterval?: number; // in milliseconds
 }
 
+interface ConflictState {
+  localDraft: { title?: string; body: string; gender?: string };
+  serverDraft: Draft;
+}
+
 export const DraftManager: React.FC<DraftManagerProps> = ({
   currentDraft,
   onLoadDraft,
@@ -41,11 +46,12 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
   const [clearDraftsOpen, setClearDraftsOpen] = useState(false);
+  const [conflict, setConflict] = useState<ConflictState>(null);
   const [saveStatus, setSaveStatus] = useState<
     "saved" | "saving" | "unsaved" | "failed"
   >("saved");
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedRef = useRef<string>("");
   const toast = useGlobalToast();
 
@@ -208,6 +214,32 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
     }
   };
 
+  const handleResolveConflict = (resolution: "keep-local" | "use-server" | "discard") => {
+    if (!conflict) return;
+    if (resolution === "use-server") {
+      onLoadDraft(conflict.serverDraft);
+      lastSavedRef.current = JSON.stringify({
+        title: conflict.serverDraft.title,
+        body: conflict.serverDraft.body,
+        gender: conflict.serverDraft.gender,
+      });
+      setCurrentDraftId(conflict.serverDraft.id);
+      setSaveStatus("saved");
+      setSaveMessage("Server draft restored.");
+    } else if (resolution === "keep-local") {
+      lastSavedRef.current = JSON.stringify(conflict.localDraft);
+      setSaveStatus("saved");
+      setSaveMessage("Local changes preserved.");
+    } else {
+      // discard — clear current draft state
+      lastSavedRef.current = "";
+      setCurrentDraftId(null);
+      setSaveStatus("saved");
+      setSaveMessage("Draft discarded.");
+    }
+    setConflict(null);
+  };
+
   return (
     <>
       <ConfirmDialog
@@ -219,6 +251,71 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
         variant="danger"
         onConfirm={() => void handleClearDrafts()}
       />
+
+      {/* Draft Conflict Resolution Dialog */}
+      {conflict && (
+        <Modal
+          isOpen={!!conflict}
+          onClose={() => setConflict(null)}
+          title="Draft Conflict Detected"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-400">
+              This draft has been updated from another device or session. Both
+              versions differ. Choose which version to keep.
+            </p>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                <p className="text-xs font-medium text-amber-400 mb-1">
+                  Your Local Draft
+                </p>
+                <p className="text-xs text-zinc-500 line-clamp-3">
+                  {conflict.localDraft.body || "(empty)"}
+                </p>
+              </div>
+              <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                <p className="text-xs font-medium text-blue-400 mb-1">
+                  Server Draft
+                </p>
+                <p className="text-xs text-zinc-500 line-clamp-3">
+                  {conflict.serverDraft.body || "(empty)"}
+                </p>
+                <p className="text-xs text-zinc-600 mt-1">
+                  Saved {formatDate(new Date(conflict.serverDraft.savedAt))}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => handleResolveConflict("keep-local")}
+                className="flex-1"
+              >
+                Keep Local
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleResolveConflict("use-server")}
+                className="flex-1"
+              >
+                Use Server
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleResolveConflict("discard")}
+                className="flex-1"
+              >
+                Discard Both
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       <div className="flex flex-col gap-2">
         <Button
