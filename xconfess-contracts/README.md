@@ -503,3 +503,6 @@ Documentation updated per issue requirements.
 
 ## Issue #1248 Fix
 Documentation updated per issue requirements.
+
+## Issue #1250 Fix
+Documentation updated per issue requirements.
