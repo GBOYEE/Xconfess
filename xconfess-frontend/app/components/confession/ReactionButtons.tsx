@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { cn } from "@/app/lib/utils/cn";
 import { useReactions } from "@/app/lib/hooks/useReactions";
+import { ReactionTooltip } from "@/app/components/confession/ReactionTooltip";
 import type { ReactionType } from "@/app/lib/types/reaction";
 
 interface Props {
@@ -53,51 +54,57 @@ export const ReactionButton = ({
     ? `Reacted with ${type}, current count ${displayCount}`
     : `React with ${type}, current count ${displayCount}`;
 
+  const tooltipLabel = type === "like" ? "Like" : "Love";
+
   return (
-    <div className="relative">
-      <button
-        onClick={react}
-        disabled={isPending}
-        aria-label={label}
-        aria-pressed={computedIsActive}
-        title={error || undefined}
-        className={cn(
-          "relative flex items-center gap-2 px-4 py-2 rounded-full",
-          "min-w-11 min-h-11 touch-manipulation",
-          "transition-all duration-200 ease-out",
-          "bg-zinc-800 hover:bg-zinc-700",
-          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-500",
-          "active:scale-95",
-          computedIsActive && "bg-pink-600 text-white",
-          isAnimating && "animate-reaction-bounce",
-          error && "ring-2 ring-red-500"
-        )}
-      >
-        <span className="text-lg select-none">
-          {type === "like" ? "👍" : "❤️"}
-        </span>
-
-        <span className="text-sm font-medium">{displayCount}</span>
-        <span
-          role="status"
-          aria-label={statusLabel}
-          title={statusLabel}
+    <ReactionTooltip label={tooltipLabel} count={displayCount} active={computedIsActive}>
+      <div className="relative">
+        <button
+          onClick={react}
+          disabled={isPending}
+          aria-label={label}
+          aria-pressed={computedIsActive}
+          title={error || undefined}
           className={cn(
-            "h-2 w-2 rounded-full",
-            connectionState === "connected" && "bg-emerald-400",
-            connectionState === "reconnecting" && "bg-amber-400 animate-pulse",
-            connectionState === "disconnected" && "bg-zinc-500"
+            "relative flex items-center gap-2 px-4 py-2 rounded-full",
+            "min-w-11 min-h-11 touch-manipulation",
+            "transition-all duration-200 ease-out",
+            "bg-zinc-800 hover:bg-zinc-700",
+            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-500",
+            "active:scale-95",
+            computedIsActive && "bg-pink-600 text-white",
+            isAnimating && "animate-reaction-bounce",
+            error && "ring-2 ring-red-500"
           )}
-        />
-      </button>
+        >
+          <span className="text-lg select-none" aria-hidden="true">
+            {type === "like" ? "👍" : "❤️"}
+          </span>
 
-      {error && (
-        <div role="alert" className="absolute top-full mt-1 left-1/2 -translate-x-1/2 whitespace-nowrap">
-          <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
-            {error}
+          <span className="text-sm font-medium" aria-hidden="true">
+            {displayCount}
+          </span>
+          <span
+            role="status"
+            aria-label={statusLabel}
+            title={statusLabel}
+            className={cn(
+              "h-2 w-2 rounded-full",
+              connectionState === "connected" && "bg-emerald-400",
+              connectionState === "reconnecting" && "bg-amber-400 animate-pulse",
+              connectionState === "disconnected" && "bg-zinc-500"
+            )}
+          />
+        </button>
+
+        {error && (
+          <div role="alert" className="absolute top-full mt-1 left-1/2 -translate-x-1/2 whitespace-nowrap z-50">
+            <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
+              {error}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </ReactionTooltip>
   );
 };
