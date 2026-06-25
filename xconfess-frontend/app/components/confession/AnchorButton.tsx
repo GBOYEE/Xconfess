@@ -18,6 +18,8 @@ interface AnchorButtonProps {
   isAnchored?: boolean;
   stellarTxHash?: string | null;
   onAnchorSuccess?: (txHash: string) => void;
+  onAnchorPending?: () => void;
+  onAnchorFailed?: (error: string) => void;
   className?: string;
 }
 
@@ -31,6 +33,8 @@ export const AnchorButton: FC<AnchorButtonProps> = ({
   isAnchored = false,
   stellarTxHash = null,
   onAnchorSuccess,
+  onAnchorPending,
+  onAnchorFailed,
   className,
 }) => {
   const {
@@ -67,6 +71,7 @@ export const AnchorButton: FC<AnchorButtonProps> = ({
     setError(null);
     setStatus("pending");
     setLiveMessage("Anchoring confession on Stellar…");
+    onAnchorPending?.();
 
     if (!isConnected) {
       try {
@@ -76,6 +81,7 @@ export const AnchorButton: FC<AnchorButtonProps> = ({
         setError(msg);
         setStatus("failed");
         setLiveMessage(msg);
+        onAnchorFailed?.(msg);
         return;
       }
     }
@@ -98,6 +104,7 @@ export const AnchorButton: FC<AnchorButtonProps> = ({
         setError(msg);
         setStatus("failed");
         setLiveMessage(msg);
+        onAnchorFailed?.(msg);
         return;
       }
 
@@ -138,6 +145,7 @@ export const AnchorButton: FC<AnchorButtonProps> = ({
       setError(msg);
       setStatus("failed");
       setLiveMessage(msg);
+      onAnchorFailed?.(msg);
     }
   };
 

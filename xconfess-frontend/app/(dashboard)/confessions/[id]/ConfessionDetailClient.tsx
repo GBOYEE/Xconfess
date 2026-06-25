@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { ReactionButton } from "@/app/components/confession/ReactionButtons";
 import { AnchorButton } from "@/app/components/confession/AnchorButton";
+import { AnchorTimeline } from "@/app/components/confession/AnchorTimeline";
 import { ShareButton } from "@/app/components/confession/ShareButton";
 import { CommentSection } from "@/app/components/confession/CommentSection";
 import { RelatedConfessions } from "@/app/components/confession/RelatedConfessions";
@@ -49,6 +50,11 @@ export function ConfessionDetailClient({
     "idle" | "pending" | "success" | "error"
   >("idle");
   const [reportError, setReportError] = useState<string | null>(null);
+  const [anchorActivity, setAnchorActivity] = useState<{
+    status: "requested" | "submitted" | "confirmed" | "failed" | "expired";
+    txHash?: string | null;
+    error?: string | null;
+  } | null>(null);
 
   // Core data hook setup modified to catch distinct error streams
   const {
@@ -298,15 +304,41 @@ export function ConfessionDetailClient({
                   count={confession.reactions.love}
                   confessionId={confessionId}
                 />
-                <AnchorButton
-                  confessionId={confessionId}
-                  confessionContent={confession.content}
-                  isAnchored={confession.isAnchored}
-                  stellarTxHash={confession.stellarTxHash}
-                  onAnchorSuccess={() => {
-                    void refetch();
-                  }}
-                />
+                <div className="flex flex-col gap-2">
+                  <AnchorButton
+                    confessionId={confessionId}
+                    confessionContent={confession.content}
+                    isAnchored={confession.isAnchored}
+                    stellarTxHash={confession.stellarTxHash}
+                    onAnchorSuccess={() => {
+                      setAnchorActivity({
+                        status: "submitted",
+                        txHash: confession.stellarTxHash,
+                      });
+                      void refetch();
+                    }}
+                    onAnchorPending={() => {
+                      setAnchorActivity({ status: "requested" });
+                    }}
+                    onAnchorFailed={(err) => {
+                      setAnchorActivity({
+                        status: "failed",
+                        error: err,
+                      });
+                    }}
+                  />
+                  {anchorActivity && anchorActivity.status !== "confirmed" && (
+                    <AnchorTimeline
+                      status={anchorActivity.status}
+                      txHash={anchorActivity.txHash}
+                      error={anchorActivity.error}
+                      onRetry={() => {
+                        setAnchorActivity(null);
+                      }}
+                      className="ml-1"
+                    />
+                  )}
+                </div>
               </div>
               <ShareButton confessionId={confessionId} variant="dropdown" />
             </div>
